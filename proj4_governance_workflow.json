@@ -1,0 +1,413 @@
+{
+  "name": "Proj4 Governance Tool",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1HmqDSsCl35B9Nv9Fp4tJUhQdVJjAh3aGdKQeTV_Vat4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Questions",
+          "mode": "name"
+        },
+        "filtersUI": {},
+        "options": {}
+      },
+      "id": "node-read-questions",
+      "name": "Read Questions",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [460, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "startTime",
+              "value": "={{ Date.now() }}",
+              "type": "number"
+            },
+            {
+              "id": "a2",
+              "name": "User ID",
+              "value": "={{ $json['User ID'] }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "Query",
+              "value": "={{ $json['Query'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-start-time",
+      "name": "Set Start Time",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: 'You are a helpful assistant. Answer the following query clearly, accurately, and concisely.' }, { role: 'user', content: $json['Query'] }], temperature: 0.7, max_tokens: 512 }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "node-generate-response",
+      "name": "Generate Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: 'You are a data governance classifier. Classify the given QUERY and return a JSON object with two fields: classification and domain.\\n\\nclassification must be one of: SENSITIVE, STANDARD, UNCERTAIN\\n- SENSITIVE: query contains or requests PII, financial data, strategic roadmap, credentials, legal advice, medical info, or individual-specific HR actions\\n- STANDARD: query contains or requests no sensitive information\\n- UNCERTAIN: query spans multiple sensitive categories, is ambiguous, or cannot be confidently classified as SENSITIVE or STANDARD\\n\\ndomain must be one of: PII, FINANCIALS, STRATEGIC, CREDENTIALS, LEGAL, MEDICAL, HR, NAMED_INDIVIDUAL, NONE\\nChoose the single most relevant domain. Use NONE if classification is STANDARD.' }, { role: 'user', content: 'Classify this query: ' + $('Set Start Time').item.json['Query'] }], temperature: 0, max_tokens: 60, response_format: { type: 'json_object' } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "node-classify-query",
+      "name": "Classify Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: 'You are a data governance classifier. Classify the given RESPONSE and return a JSON object with two fields: classification and domain.\\n\\nclassification must be one of: SENSITIVE, STANDARD, UNCERTAIN\\n- SENSITIVE: response contains PII, financial data, strategic roadmap, credentials, legal advice, medical info, or individual-specific HR actions\\n- STANDARD: response contains no sensitive information\\n- UNCERTAIN: response spans multiple sensitive categories, is ambiguous, or cannot be confidently classified as SENSITIVE or STANDARD. UNCERTAIN is a valid and expected output, not a failure state.\\n\\ndomain must be one of: PII, FINANCIALS, STRATEGIC, CREDENTIALS, LEGAL, MEDICAL, HR, NAMED_INDIVIDUAL, NONE\\nChoose the single most relevant domain. Use NONE if classification is STANDARD.' }, { role: 'user', content: 'Classify this response: ' + $('Generate Response').item.json.choices[0].message.content }], temperature: 0, max_tokens: 60, response_format: { type: 'json_object' } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "node-classify-response",
+      "name": "Classify Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "Timestamp",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            },
+            {
+              "id": "b2",
+              "name": "User ID",
+              "value": "={{ $('Set Start Time').item.json['User ID'] }}",
+              "type": "string"
+            },
+            {
+              "id": "b3",
+              "name": "query",
+              "value": "={{ $('Set Start Time').item.json['Query'] }}",
+              "type": "string"
+            },
+            {
+              "id": "b4",
+              "name": "response",
+              "value": "={{ $('Generate Response').item.json.choices[0].message.content }}",
+              "type": "string"
+            },
+            {
+              "id": "b5",
+              "name": "response class",
+              "value": "={{ JSON.parse($('Classify Response').item.json.choices[0].message.content).classification }}",
+              "type": "string"
+            },
+            {
+              "id": "b6",
+              "name": "response domain",
+              "value": "={{ JSON.parse($('Classify Response').item.json.choices[0].message.content).domain }}",
+              "type": "string"
+            },
+            {
+              "id": "b7",
+              "name": "query class",
+              "value": "={{ JSON.parse($('Classify Query').item.json.choices[0].message.content).classification }}",
+              "type": "string"
+            },
+            {
+              "id": "b8",
+              "name": "query domain",
+              "value": "={{ JSON.parse($('Classify Query').item.json.choices[0].message.content).domain }}",
+              "type": "string"
+            },
+            {
+              "id": "b9",
+              "name": "input tokens",
+              "value": "={{ $('Generate Response').item.json.usage.prompt_tokens + $('Classify Query').item.json.usage.prompt_tokens + $('Classify Response').item.json.usage.prompt_tokens }}",
+              "type": "number"
+            },
+            {
+              "id": "b10",
+              "name": "output tokens",
+              "value": "={{ $('Generate Response').item.json.usage.completion_tokens + $('Classify Query').item.json.usage.completion_tokens + $('Classify Response').item.json.usage.completion_tokens }}",
+              "type": "number"
+            },
+            {
+              "id": "b11",
+              "name": "latency ms",
+              "value": "={{ Date.now() - $('Set Start Time').item.json.startTime }}",
+              "type": "number"
+            },
+            {
+              "id": "b12",
+              "name": "est cost",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-assemble-row",
+      "name": "Assemble Row",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1HmqDSsCl35B9Nv9Fp4tJUhQdVJjAh3aGdKQeTV_Vat4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Audit Log Claude",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "node-append-audit-log",
+      "name": "Append Audit Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1780, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json['response class'] }}",
+              "rightValue": "SENSITIVE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json['response class'] }}",
+              "rightValue": "UNCERTAIN",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "node-route-to-review",
+      "name": "Route to Review",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1HmqDSsCl35B9Nv9Fp4tJUhQdVJjAh3aGdKQeTV_Vat4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Review Claude",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "node-append-review",
+      "name": "Append Review",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2220, 180],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "node-no-op",
+      "name": "No Operation",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2220, 420]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [{ "node": "Read Questions", "type": "main", "index": 0 }]
+      ]
+    },
+    "Read Questions": {
+      "main": [
+        [{ "node": "Set Start Time", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Start Time": {
+      "main": [
+        [{ "node": "Generate Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate Response": {
+      "main": [
+        [{ "node": "Classify Query", "type": "main", "index": 0 }]
+      ]
+    },
+    "Classify Query": {
+      "main": [
+        [{ "node": "Classify Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Classify Response": {
+      "main": [
+        [{ "node": "Assemble Row", "type": "main", "index": 0 }]
+      ]
+    },
+    "Assemble Row": {
+      "main": [
+        [{ "node": "Append Audit Log", "type": "main", "index": 0 }]
+      ]
+    },
+    "Append Audit Log": {
+      "main": [
+        [{ "node": "Route to Review", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route to Review": {
+      "main": [
+        [{ "node": "Append Review", "type": "main", "index": 0 }],
+        [{ "node": "No Operation", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "proj4-governance-tool",
+  "tags": []
+}

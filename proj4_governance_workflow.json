@@ -201,7 +201,7 @@
     {
       "parameters": {
         "mode": "combine",
-        "combinationMode": "mergeByPosition",
+        "combineBy": "combineByPosition",
         "options": {}
       },
       "id": "node-merge",

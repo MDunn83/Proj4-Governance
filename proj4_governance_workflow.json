@@ -78,7 +78,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: 'You are a helpful assistant. Answer the following query clearly, accurately, and concisely.' }, { role: 'user', content: $json['Query'] }], temperature: 0.7, max_tokens: 512 }) }}",
+        "body": "={{ JSON.stringify({ model: 'gemma2-9b-it', messages: [{ role: 'user', content: 'Answer the following question in plain text only. Do not use markdown, bullet points, headers, bold, italic, or any formatting. Write in plain prose sentences only.\\n\\nQuestion: ' + $json['Query'] }], temperature: 0.7, max_tokens: 512 }) }}",
         "options": {
           "timeout": 30000
         }
@@ -86,7 +86,7 @@
       "id": "node-generate-response",
       "name": "Generate Response",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
+      "typeVersion": 4.2,
       "position": [900, 300],
       "credentials": {
         "httpHeaderAuth": {
@@ -97,6 +97,17 @@
     },
     {
       "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const raw = ($json.choices[0].message.content || '').toString();\nlet text = raw;\n// Remove fenced code blocks\ntext = text.replace(/```[\\s\\S]*?```/g, '');\n// Remove inline code\ntext = text.replace(/`([^`]+)`/g, '$1');\n// Remove ATX headers\ntext = text.replace(/^#{1,6}\\s+/gm, '');\n// Remove bold and italic\ntext = text.replace(/\\*{1,3}([^*\\n]+)\\*{1,3}/g, '$1');\ntext = text.replace(/_{1,3}([^_\\n]+)_{1,3}/g, '$1');\n// Remove unordered list markers\ntext = text.replace(/^[\\*\\-\\+]\\s+/gm, '');\n// Remove ordered list markers\ntext = text.replace(/^\\d+\\.\\s+/gm, '');\n// Remove horizontal rules\ntext = text.replace(/^[\\-\\*_]{3,}\\s*$/gm, '');\n// Collapse excess blank lines\ntext = text.replace(/\\n{3,}/g, '\\n\\n');\ntext = text.trim();\nreturn { json: { cleanResponse: text, usage: $json.usage } };"
+      },
+      "id": "node-strip-markdown",
+      "name": "Strip Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "authentication": "genericCredentialType",
@@ -104,7 +115,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: 'You are a data governance classifier. Classify the given QUERY and return a JSON object with two fields: classification and domain.\\n\\nclassification must be one of: SENSITIVE, STANDARD, UNCERTAIN\\n- SENSITIVE: query contains or requests PII, financial data, strategic roadmap, credentials, legal advice, medical info, or individual-specific HR actions\\n- STANDARD: query contains or requests no sensitive information\\n- UNCERTAIN: query spans multiple sensitive categories, is ambiguous, or cannot be confidently classified as SENSITIVE or STANDARD\\n\\ndomain must be one of: PII, FINANCIALS, STRATEGIC, CREDENTIALS, LEGAL, MEDICAL, HR, NAMED_INDIVIDUAL, NONE\\nChoose the single most relevant domain. Use NONE if classification is STANDARD.' }, { role: 'user', content: 'Classify this query: ' + $('Set Start Time').item.json['Query'] }], temperature: 0, max_tokens: 60, response_format: { type: 'json_object' } }) }}",
+        "body": "={{ JSON.stringify({ model: 'gemma2-9b-it', messages: [{ role: 'user', content: 'You are a data governance classifier. Classify the given QUERY and return a JSON object with two fields: classification and domain.\\n\\nclassification must be one of: SENSITIVE, STANDARD, UNCERTAIN\\n- SENSITIVE: query contains or requests PII, financial data, strategic roadmap, credentials, legal advice, medical info, or individual-specific HR actions\\n- STANDARD: query contains or requests no sensitive information\\n- UNCERTAIN: query spans multiple sensitive categories, is ambiguous, or cannot be confidently classified as SENSITIVE or STANDARD\\n\\ndomain must be one of: PII, FINANCIALS, STRATEGIC, CREDENTIALS, LEGAL, MEDICAL, HR, NAMED_INDIVIDUAL, NONE\\nChoose the single most relevant domain. Use NONE if classification is STANDARD.\\n\\nQuery to classify: ' + $('Set Start Time').item.json['Query'] }], temperature: 0, max_tokens: 60, response_format: { type: 'json_object' } }) }}",
         "options": {
           "timeout": 30000
         }
@@ -112,8 +123,8 @@
       "id": "node-classify-query",
       "name": "Classify Query",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1120, 300],
+      "typeVersion": 4.2,
+      "position": [1340, 300],
       "credentials": {
         "httpHeaderAuth": {
           "id": "2",
@@ -130,7 +141,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: 'You are a data governance classifier. Classify the given RESPONSE and return a JSON object with two fields: classification and domain.\\n\\nclassification must be one of: SENSITIVE, STANDARD, UNCERTAIN\\n- SENSITIVE: response contains PII, financial data, strategic roadmap, credentials, legal advice, medical info, or individual-specific HR actions\\n- STANDARD: response contains no sensitive information\\n- UNCERTAIN: response spans multiple sensitive categories, is ambiguous, or cannot be confidently classified as SENSITIVE or STANDARD. UNCERTAIN is a valid and expected output, not a failure state.\\n\\ndomain must be one of: PII, FINANCIALS, STRATEGIC, CREDENTIALS, LEGAL, MEDICAL, HR, NAMED_INDIVIDUAL, NONE\\nChoose the single most relevant domain. Use NONE if classification is STANDARD.' }, { role: 'user', content: 'Classify this response: ' + $('Generate Response').item.json.choices[0].message.content }], temperature: 0, max_tokens: 60, response_format: { type: 'json_object' } }) }}",
+        "body": "={{ JSON.stringify({ model: 'gemma2-9b-it', messages: [{ role: 'user', content: 'You are a data governance classifier. Classify the given RESPONSE and return a JSON object with two fields: classification and domain.\\n\\nclassification must be one of: SENSITIVE, STANDARD, UNCERTAIN\\n- SENSITIVE: response contains PII, financial data, strategic roadmap, credentials, legal advice, medical info, or individual-specific HR actions\\n- STANDARD: response contains no sensitive information\\n- UNCERTAIN: response spans multiple sensitive categories, is ambiguous, or cannot be confidently classified as SENSITIVE or STANDARD. UNCERTAIN is a valid and expected output, not a failure state.\\n\\ndomain must be one of: PII, FINANCIALS, STRATEGIC, CREDENTIALS, LEGAL, MEDICAL, HR, NAMED_INDIVIDUAL, NONE\\nChoose the single most relevant domain. Use NONE if classification is STANDARD.\\n\\nResponse to classify: ' + $('Strip Markdown').item.json.cleanResponse }], temperature: 0, max_tokens: 60, response_format: { type: 'json_object' } }) }}",
         "options": {
           "timeout": 30000
         }
@@ -138,8 +149,8 @@
       "id": "node-classify-response",
       "name": "Classify Response",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1340, 300],
+      "typeVersion": 4.2,
+      "position": [1560, 300],
       "credentials": {
         "httpHeaderAuth": {
           "id": "2",
@@ -172,7 +183,7 @@
             {
               "id": "b4",
               "name": "response",
-              "value": "={{ $('Generate Response').item.json.choices[0].message.content }}",
+              "value": "={{ $('Strip Markdown').item.json.cleanResponse }}",
               "type": "string"
             },
             {
@@ -202,13 +213,13 @@
             {
               "id": "b9",
               "name": "input tokens",
-              "value": "={{ $('Generate Response').item.json.usage.prompt_tokens + $('Classify Query').item.json.usage.prompt_tokens + $('Classify Response').item.json.usage.prompt_tokens }}",
+              "value": "={{ $('Strip Markdown').item.json.usage.prompt_tokens + $('Classify Query').item.json.usage.prompt_tokens + $('Classify Response').item.json.usage.prompt_tokens }}",
               "type": "number"
             },
             {
               "id": "b10",
               "name": "output tokens",
-              "value": "={{ $('Generate Response').item.json.usage.completion_tokens + $('Classify Query').item.json.usage.completion_tokens + $('Classify Response').item.json.usage.completion_tokens }}",
+              "value": "={{ $('Strip Markdown').item.json.usage.completion_tokens + $('Classify Query').item.json.usage.completion_tokens + $('Classify Response').item.json.usage.completion_tokens }}",
               "type": "number"
             },
             {
@@ -231,7 +242,7 @@
       "name": "Assemble Row",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3,
-      "position": [1560, 300]
+      "position": [1780, 300]
     },
     {
       "parameters": {
@@ -260,7 +271,7 @@
       "name": "Append Audit Log",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4,
-      "position": [1780, 300],
+      "position": [2000, 300],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "1",
@@ -305,7 +316,7 @@
       "name": "Route to Review",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2000, 300]
+      "position": [2220, 300]
     },
     {
       "parameters": {
@@ -334,7 +345,7 @@
       "name": "Append Review",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4,
-      "position": [2220, 180],
+      "position": [2440, 180],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "1",
@@ -348,7 +359,7 @@
       "name": "No Operation",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [2220, 420]
+      "position": [2440, 420]
     }
   ],
   "connections": {
@@ -368,6 +379,11 @@
       ]
     },
     "Generate Response": {
+      "main": [
+        [{ "node": "Strip Markdown", "type": "main", "index": 0 }]
+      ]
+    },
+    "Strip Markdown": {
       "main": [
         [{ "node": "Classify Query", "type": "main", "index": 0 }]
       ]
@@ -404,7 +420,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "1",
+  "versionId": "2",
   "meta": {
     "templateCredsSetupCompleted": true
   },

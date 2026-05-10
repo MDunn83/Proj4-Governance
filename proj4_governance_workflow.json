@@ -1,0 +1,442 @@
+{
+  "name": "Proj4 Governance Tool",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1HmqDSsCl35B9Nv9Fp4tJUhQdVJjAh3aGdKQeTV_Vat4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Questions",
+          "mode": "name"
+        },
+        "filtersUI": {},
+        "options": {}
+      },
+      "id": "node-read-questions",
+      "name": "Read Questions",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [460, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "startTime",
+              "value": "={{ Date.now() }}",
+              "type": "number"
+            },
+            {
+              "id": "a2",
+              "name": "User ID",
+              "value": "={{ $json['User ID'] }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "Query",
+              "value": "={{ $json['Query'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-start-time",
+      "name": "Set Start Time",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'qwen/qwen3-32b', messages: [{ role: 'user', content: 'Answer the following question in plain text only. Do not use markdown, bullet points, headers, bold, italic, or any formatting. Write in plain prose sentences only.\\n\\nQuestion: ' + $json['Query'] }], temperature: 0.7, max_tokens: 512, reasoning_effort: 'none' }) }}",
+        "options": {
+          "timeout": 30000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 4000
+            }
+          }
+        }
+      },
+      "id": "node-generate-response",
+      "name": "Generate Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const raw = ($json.choices[0].message.content || '').toString();\nlet text = raw;\ntext = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '');\ntext = text.replace(/\\\\n/g, ' ');\ntext = text.replace(/```[\\s\\S]*?```/g, '');\ntext = text.replace(/`([^`]+)`/g, '$1');\ntext = text.replace(/^#{1,6}\\s+/gm, '');\ntext = text.replace(/\\*{1,3}([^*\\n]+)\\*{1,3}/g, '$1');\ntext = text.replace(/_{1,3}([^_\\n]+)_{1,3}/g, '$1');\ntext = text.replace(/^[\\*\\-\\+]\\s+/gm, '');\ntext = text.replace(/^\\d+\\.\\s+/gm, '');\ntext = text.replace(/^[\\-\\*_]{3,}\\s*$/gm, '');\ntext = text.replace(/\\n{3,}/g, '\\n\\n');\ntext = text.trim();\nreturn {\n  json: {\n    cleanResponse: text,\n    genUsage: $json.usage,\n    userId: $('Set Start Time').item.json['User ID'],\n    query: $('Set Start Time').item.json['Query'],\n    startTime: $('Set Start Time').item.json.startTime\n  }\n};"
+      },
+      "id": "node-strip-markdown",
+      "name": "Strip Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'qwen/qwen3-32b', messages: [{ role: 'user', content: 'Classify the QUERY below for data governance. Return ONLY a raw JSON object with no markdown and no explanation.\\n\\nclassification field (one of): SENSITIVE, STANDARD, UNCERTAIN\\n- SENSITIVE: requests PII, financial data, strategic roadmap, credentials, legal advice, medical info, or individual-specific HR actions\\n- STANDARD: requests no sensitive information\\n- UNCERTAIN: ambiguous or spans multiple sensitive categories\\n\\ndomain field (one of): PII, FINANCIALS, STRATEGIC, CREDENTIALS, LEGAL, MEDICAL, HR, NAMED_INDIVIDUAL, NONE\\n\\nQuery: ' + $json.query }], temperature: 0, max_tokens: 200, reasoning_effort: 'none' }) }}",
+        "options": {
+          "timeout": 30000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 4000
+            }
+          }
+        }
+      },
+      "id": "node-classify-query",
+      "name": "Classify Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 160],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: 'qwen/qwen3-32b', messages: [{ role: 'user', content: 'Classify the RESPONSE below for data governance. Return ONLY a raw JSON object with no markdown and no explanation.\\n\\nclassification field (one of): SENSITIVE, STANDARD, UNCERTAIN\\n- SENSITIVE: contains PII, financial data, strategic roadmap, credentials, legal advice, medical info, or individual-specific HR actions\\n- STANDARD: contains no sensitive information\\n- UNCERTAIN: ambiguous, spans multiple sensitive categories, or cannot be confidently classified. UNCERTAIN is a valid output.\\n\\ndomain field (one of): PII, FINANCIALS, STRATEGIC, CREDENTIALS, LEGAL, MEDICAL, HR, NAMED_INDIVIDUAL, NONE\\n\\nResponse: ' + $json.cleanResponse }], temperature: 0, max_tokens: 200, reasoning_effort: 'none' }) }}",
+        "options": {
+          "timeout": 30000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 4000
+            }
+          }
+        }
+      },
+      "id": "node-classify-response",
+      "name": "Classify Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 440],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "function parseClass(raw) {\n  const text = (raw || '').toString().trim();\n  let classification = 'UNCERTAIN';\n  let domain = 'NONE';\n  try {\n    const s = text.indexOf('{');\n    const e = text.lastIndexOf('}');\n    if (s !== -1 && e > s) {\n      const p = JSON.parse(text.substring(s, e + 1));\n      if (p.classification) classification = p.classification;\n      if (p.domain) domain = p.domain;\n    }\n  } catch (err) {\n    const cm = text.match(/classification[^A-Z]*([A-Z_]+)/);\n    const dm = text.match(/domain[^A-Z]*([A-Z_]+)/);\n    if (cm) classification = cm[1];\n    if (dm) domain = dm[1];\n  }\n  const vc = ['SENSITIVE', 'STANDARD', 'UNCERTAIN'];\n  const vd = ['PII', 'FINANCIALS', 'STRATEGIC', 'CREDENTIALS', 'LEGAL', 'MEDICAL', 'HR', 'NAMED_INDIVIDUAL', 'NONE'];\n  if (!vc.includes(classification)) classification = 'UNCERTAIN';\n  if (!vd.includes(domain)) domain = 'NONE';\n  return { classification, domain };\n}\nconst result = parseClass($json.choices[0].message.content);\nconst strip = $('Strip Markdown').item.json;\nreturn {\n  json: {\n    queryClass: result.classification,\n    queryDomain: result.domain,\n    queryTokensIn: ($json.usage || {}).prompt_tokens || 0,\n    queryTokensOut: ($json.usage || {}).completion_tokens || 0,\n    cleanResponse: strip.cleanResponse,\n    genTokensIn: (strip.genUsage || {}).prompt_tokens || 0,\n    genTokensOut: (strip.genUsage || {}).completion_tokens || 0,\n    userId: strip.userId,\n    query: strip.query,\n    startTime: strip.startTime\n  }\n};"
+      },
+      "id": "node-parse-query-result",
+      "name": "Parse Query Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 160]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "function parseClass(raw) {\n  const text = (raw || '').toString().trim();\n  let classification = 'UNCERTAIN';\n  let domain = 'NONE';\n  try {\n    const s = text.indexOf('{');\n    const e = text.lastIndexOf('}');\n    if (s !== -1 && e > s) {\n      const p = JSON.parse(text.substring(s, e + 1));\n      if (p.classification) classification = p.classification;\n      if (p.domain) domain = p.domain;\n    }\n  } catch (err) {\n    const cm = text.match(/classification[^A-Z]*([A-Z_]+)/);\n    const dm = text.match(/domain[^A-Z]*([A-Z_]+)/);\n    if (cm) classification = cm[1];\n    if (dm) domain = dm[1];\n  }\n  const vc = ['SENSITIVE', 'STANDARD', 'UNCERTAIN'];\n  const vd = ['PII', 'FINANCIALS', 'STRATEGIC', 'CREDENTIALS', 'LEGAL', 'MEDICAL', 'HR', 'NAMED_INDIVIDUAL', 'NONE'];\n  if (!vc.includes(classification)) classification = 'UNCERTAIN';\n  if (!vd.includes(domain)) domain = 'NONE';\n  return { classification, domain };\n}\nconst result = parseClass($json.choices[0].message.content);\nreturn {\n  json: {\n    responseClass: result.classification,\n    responseDomain: result.domain,\n    responseTokensIn: ($json.usage || {}).prompt_tokens || 0,\n    responseTokensOut: ($json.usage || {}).completion_tokens || 0\n  }\n};"
+      },
+      "id": "node-parse-response-result",
+      "name": "Parse Response Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 440]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "node-merge",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  json: {\n    'Timestamp': new Date().toISOString(),\n    'User ID': $json.userId,\n    'query': $json.query,\n    'response': $json.cleanResponse,\n    'response class': $json.responseClass,\n    'response domain': $json.responseDomain,\n    'query class': $json.queryClass,\n    'query domain': $json.queryDomain,\n    'input tokens': ($json.genTokensIn || 0) + ($json.queryTokensIn || 0) + ($json.responseTokensIn || 0),\n    'output tokens': ($json.genTokensOut || 0) + ($json.queryTokensOut || 0) + ($json.responseTokensOut || 0),\n    'latency ms': Date.now() - $json.startTime,\n    'est cost': 0\n  }\n};"
+      },
+      "id": "node-assemble-row",
+      "name": "Assemble Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1HmqDSsCl35B9Nv9Fp4tJUhQdVJjAh3aGdKQeTV_Vat4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Audit Log Claude",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "node-append-audit-log",
+      "name": "Append Audit Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2220, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json['response class'] }}",
+              "rightValue": "SENSITIVE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json['response class'] }}",
+              "rightValue": "UNCERTAIN",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "c3",
+              "leftValue": "={{ $json['query class'] }}",
+              "rightValue": "SENSITIVE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "c4",
+              "leftValue": "={{ $json['query class'] }}",
+              "rightValue": "UNCERTAIN",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "node-route-to-review",
+      "name": "Route to Review",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1HmqDSsCl35B9Nv9Fp4tJUhQdVJjAh3aGdKQeTV_Vat4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Review Claude",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "node-append-review",
+      "name": "Append Review",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2660, 160],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "node-no-op",
+      "name": "No Operation",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2660, 440]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [{ "node": "Read Questions", "type": "main", "index": 0 }]
+      ]
+    },
+    "Read Questions": {
+      "main": [
+        [{ "node": "Set Start Time", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Start Time": {
+      "main": [
+        [{ "node": "Generate Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate Response": {
+      "main": [
+        [{ "node": "Strip Markdown", "type": "main", "index": 0 }]
+      ]
+    },
+    "Strip Markdown": {
+      "main": [
+        [
+          { "node": "Classify Query", "type": "main", "index": 0 },
+          { "node": "Classify Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Classify Query": {
+      "main": [
+        [{ "node": "Parse Query Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Classify Response": {
+      "main": [
+        [{ "node": "Parse Response Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Query Result": {
+      "main": [
+        [{ "node": "Merge", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Response Result": {
+      "main": [
+        [{ "node": "Merge", "type": "main", "index": 1 }]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [{ "node": "Assemble Row", "type": "main", "index": 0 }]
+      ]
+    },
+    "Assemble Row": {
+      "main": [
+        [{ "node": "Append Audit Log", "type": "main", "index": 0 }]
+      ]
+    },
+    "Append Audit Log": {
+      "main": [
+        [{ "node": "Route to Review", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route to Review": {
+      "main": [
+        [{ "node": "Append Review", "type": "main", "index": 0 }],
+        [{ "node": "No Operation", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "proj4-governance-tool",
+  "tags": []
+}
